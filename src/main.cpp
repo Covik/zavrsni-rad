@@ -1,14 +1,15 @@
 #include <SPI.h>
-#include "MFRC522.h"
+#include <MFRC522.h>
+#include <ESP8266WiFi.h>
+#include <DNSServer.h>
+#include <ESP8266WebServer.h>
+#include <WiFiManager.h>
 
-#define RST_PIN         D1          // Configurable, see typical pin layout above
-#define SS_PIN         D2         // Configurable, see typical pin layout above
+#define RST_PIN         D1
+#define SS_PIN         D2
 
-MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
+MFRC522 mfrc522(SS_PIN, RST_PIN);
 
-byte buffer[18];
-byte block;
-byte waarde[64][16];
 MFRC522::StatusCode status;
     
 MFRC522::MIFARE_Key key;
@@ -18,10 +19,10 @@ MFRC522::MIFARE_Key key;
  * Initialize.
  */
 void setup() {
-    Serial.begin(9600);         // Initialize serial communications with the PC
-    while (!Serial);            // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
-    SPI.begin();                // Init SPI bus
-    mfrc522.PCD_Init();         // Init MFRC522 card
+    Serial.begin(9600);
+    while (!Serial.availableForWrite());
+    SPI.begin();
+    mfrc522.PCD_Init();
 
     key.keyByte[0] = 0xa0;
     key.keyByte[1] = 0xa1;
@@ -29,6 +30,10 @@ void setup() {
     key.keyByte[3] = 0xa3;
     key.keyByte[4] = 0xa4;
     key.keyByte[5] = 0xa5;
+
+    WiFiManager wifiManager;
+    wifiManager.setConnectTimeout(10);
+    wifiManager.autoConnect("ESP8266", "testpass");
 }
 
 /*
@@ -68,7 +73,6 @@ String getUser()
     int currentSectorIndex = 0;
 
     for(; block < 143; block++) {
-        // Read block
         byte *blockData = readBlock(block);
 
         if(blockData) {
@@ -134,8 +138,7 @@ void loop() {
     Serial.println(mfrc522.PICC_GetTypeName(piccType));*/
 
     String user = getUser();
-
-    Serial.println("USER:"+user);
+    Serial.println("User: " + user);
     
     // http://arduino.stackexchange.com/a/14316
     if (!mfrc522.PICC_IsNewCardPresent())
