@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <SPI.h>
 #include <MFRC522.h>
 #include <ESP8266WiFi.h>
@@ -5,8 +6,9 @@
 #include <ESP8266WebServer.h>
 #include <WiFiManager.h>
 
-#define RST_PIN         D1
-#define SS_PIN         D2
+#define RST_PIN     D1
+#define SS_PIN      D2
+#define LOCK_PIN    D3
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
@@ -19,6 +21,9 @@ MFRC522::MIFARE_Key key;
  * Initialize.
  */
 void setup() {
+    pinMode(LOCK_PIN, OUTPUT);
+    digitalWrite(LOCK_PIN, LOW);
+
     Serial.begin(9600);
     while (!Serial.availableForWrite());
     SPI.begin();
@@ -31,9 +36,9 @@ void setup() {
     key.keyByte[4] = 0xa4;
     key.keyByte[5] = 0xa5;
 
-    WiFiManager wifiManager;
+    /*WiFiManager wifiManager;
     wifiManager.setConnectTimeout(10);
-    wifiManager.autoConnect("ESP8266", "testpass");
+    wifiManager.autoConnect("ESP8266", "testpass");*/
 }
 
 /*
@@ -49,13 +54,18 @@ void dump_byte_array(byte *buffer, byte bufferSize) {
 byte* readBlock(byte block) {
     static byte buffer[18];
 
+    status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, block, &key, &(mfrc522.uid));
+    if (status != MFRC522::STATUS_OK)
+        return nullptr;
+
     byte byteCount = sizeof(buffer);
     status = mfrc522.MIFARE_Read(block, buffer, &byteCount);
 
-    /*if (status == MFRC522::STATUS_OK) {
+    /*(status == MFRC522::STATUS_OK) {
         // Dump block data
         Serial.print(F("Block ")); Serial.print(block); Serial.print(F(":"));
         dump_byte_array(buffer, 16);
+        Serial.println();
     }*/
 
     return buffer;
@@ -65,23 +75,25 @@ String getUser()
 {
     byte block = 128;
 
-    status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, block, &key, &(mfrc522.uid));
-    if (status != MFRC522::STATUS_OK)
-        return "";
-
     char sectorData[240];
     int currentSectorIndex = 0;
 
     for(; block < 143; block++) {
         byte *blockData = readBlock(block);
 
-        if(blockData) {
-            for(byte i = 0; i < 16; i++) 
-                sectorData[currentSectorIndex++] = (char) blockData[i];
-        }
+        if(blockData == nullptr)
+            break;
+
+        for(byte i = 0; i < 16; i++) 
+            sectorData[currentSectorIndex++] = (char) blockData[i];
     }
 
-    if(!sectorData[0])
+    int lastBlock = block;
+
+    mfrc522.PICC_HaltA();       // Halt PICC
+    mfrc522.PCD_StopCrypto1();  // Stop encryption on PCD
+
+    if(!sectorData[0] || lastBlock != 143)
         return "";
 
     String modifiedData;
@@ -92,9 +104,7 @@ String getUser()
 
         if((byte) sectorData[i] == 0x0) {
             modifiedData += " ";
-
-            if(sectorData[i+1] == 'E')
-                i++;
+            i++;
         }
         else
             modifiedData += sectorData[i];
@@ -112,34 +122,41 @@ String getUser()
             newData += (char) currentChar;
     }
 
-    mfrc522.PICC_HaltA();       // Halt PICC
-    mfrc522.PCD_StopCrypto1();  // Stop encryption on PCD
     return newData;
+}
+
+void lock() {
+    digitalWrite(LOCK_PIN, LOW);
+}
+
+void unlock() {
+    digitalWrite(LOCK_PIN, HIGH);
 }
 
 /*
  * Main loop.
  */
 void loop() {
-    // Reset the loop if no new card present on the sensor/reader. This saves the entire process when idle.
     if (!mfrc522.PICC_IsNewCardPresent())
         return;
 
-    // Select one of the cards
     if (!mfrc522.PICC_ReadCardSerial())
         return;
 
-    // Show some details of the PICC (that is: the tag/card)
-    /*Serial.print(F("Card UID:"));
-    dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
-    Serial.println();
-    Serial.print(F("PICC type: "));
-    MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
-    Serial.println(mfrc522.PICC_GetTypeName(piccType));*/
-
     String user = getUser();
+    user.trim();
     Serial.println("User: " + user);
+
+    if(user != "") {
+        unlock();
+        delay(4000);
+        lock();
+
+        //delay(13000);
+    }
     
+    delay(2000);
+
     // http://arduino.stackexchange.com/a/14316
     if (!mfrc522.PICC_IsNewCardPresent())
         return;
