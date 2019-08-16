@@ -6,9 +6,12 @@
 #include <ESP8266WebServer.h>
 #include <WiFiManager.h>
 
+#define OPENED_PIN  D4
 #define RST_PIN     D1
 #define SS_PIN      D2
-#define LOCK_PIN    D3
+#define GREEN_PIN   D3
+#define RED_PIN     D0
+#define LOCK_PIN    D8
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
@@ -16,18 +19,27 @@ MFRC522::StatusCode status;
     
 MFRC522::MIFARE_Key key;
 
+void lock();
 
 /*
  * Initialize.
  */
 void setup() {
-    pinMode(LOCK_PIN, OUTPUT);
-    digitalWrite(LOCK_PIN, LOW);
-
     Serial.begin(9600);
     while (!Serial.availableForWrite());
+
     SPI.begin();
     mfrc522.PCD_Init();
+
+    pinMode(LOCK_PIN, OUTPUT);
+    lock();
+
+    pinMode(OPENED_PIN, INPUT_PULLUP);
+    
+    pinMode(RED_PIN, OUTPUT);
+    pinMode(GREEN_PIN, OUTPUT);
+    digitalWrite(RED_PIN, LOW);
+    analogWrite(GREEN_PIN, 0);
 
     key.keyByte[0] = 0xa0;
     key.keyByte[1] = 0xa1;
@@ -39,16 +51,6 @@ void setup() {
     /*WiFiManager wifiManager;
     wifiManager.setConnectTimeout(10);
     wifiManager.autoConnect("ESP8266", "testpass");*/
-}
-
-/*
- * Helper routine to dump a byte array as hex values to Serial.
- */
-void dump_byte_array(byte *buffer, byte bufferSize) {
-    for (byte i = 0; i < bufferSize; i++) {
-        Serial.print(buffer[i] < 0x10 ? " 0" : " ");
-        Serial.print(buffer[i], HEX);
-    }
 }
 
 byte* readBlock(byte block) {
@@ -143,19 +145,32 @@ void loop() {
     if (!mfrc522.PICC_ReadCardSerial())
         return;
 
+    int isOpened = digitalRead(OPENED_PIN);
     String user = getUser();
     user.trim();
     Serial.println("User: " + user);
+    Serial.print("Opened: ");
+    Serial.println(isOpened);
 
-    if(user != "") {
+    if(user != "" && isOpened == 0) {
+        digitalWrite(RED_PIN, LOW);
+        analogWrite(GREEN_PIN, 1023);
+
         unlock();
-        delay(4000);
+        delay(4000);        
         lock();
 
         //delay(13000);
     }
+    else {
+        digitalWrite(RED_PIN, HIGH);
+        analogWrite(GREEN_PIN, 0);
+    }
     
-    delay(2000);
+    delay(4000);
+
+    digitalWrite(RED_PIN, LOW);
+    analogWrite(GREEN_PIN, 0);
 
     // http://arduino.stackexchange.com/a/14316
     if (!mfrc522.PICC_IsNewCardPresent())
