@@ -1,10 +1,10 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <MFRC522.h>
-#include <ESP8266WiFi.h>
-#include <DNSServer.h>
-#include <ESP8266WebServer.h>
-#include <WiFiManager.h>
+//#include <ESP8266WiFi.h>
+//#include <DNSServer.h>
+//#include <ESP8266WebServer.h>
+//#include <WiFiManager.h>
 
 #define DEBUG       1
 
@@ -27,8 +27,6 @@ void lock();
  * Initialize.
  */
 void setup() {
-    pinMode(OPENED_PIN, INPUT_PULLUP);
-
     if(DEBUG == 1) {
         Serial.begin(9600);
         while (!Serial.availableForWrite());
@@ -39,6 +37,8 @@ void setup() {
 
     pinMode(LOCK_PIN, OUTPUT);
     lock();
+
+    pinMode(OPENED_PIN, INPUT_PULLUP);
     
     pinMode(RED_PIN, OUTPUT);
     pinMode(GREEN_PIN, OUTPUT);
@@ -171,6 +171,10 @@ void loop() {
         digitalWrite(RED_PIN, HIGH);
         analogWrite(GREEN_PIN, 0);
     }
+
+    // Send HTTP request
+
+    user = "";
 
     delay(2000);
 
